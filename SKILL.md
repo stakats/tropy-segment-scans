@@ -81,9 +81,11 @@ date and signature are as often at the end as the beginning). Extract title,
 creator, date and type. Only these pages need full resolution, so a 40-document
 dossier costs ~80 close reads rather than 189.
 
-Then, if transcription is in scope, transcribe handwritten documents from the
-`full/` images — see [Transcription](#transcription). Transcription is optional:
-a manifest with no `transcriptions` key produces items and metadata only.
+**Do not transcribe unless asked.** Segmenting is the default job; Tropy has
+its own transcription (Transkribus via mino), and it is better at handwriting
+than reading it off these images. Only when the researcher explicitly asks for
+transcriptions do you produce them, from the `full/` images — see
+[Transcription](#transcription).
 
 #### Finding document boundaries
 
@@ -224,9 +226,17 @@ not show up until the project is reopened (see below).
 
 ## Transcription
 
-Handwriting is transcribed from the **image**, and lands in Tropy's native
-transcription store (not a note), so it sits where Tropy's own transcription
-feature puts it.
+**Opt-in.** By default this skill segments and catalogues only, leaving the
+`transcriptions` key out of the manifest entirely. Tropy transcribes through
+Transkribus, which is purpose-built for handwriting; duplicating that here
+costs a full-resolution read of every page to produce a second-best result.
+
+When the researcher does ask for transcriptions, they are read from the
+**image** and land in Tropy's native transcription store (not a note), so they
+sit where Tropy's own transcription feature puts them.
+
+To guarantee segmentation only regardless of what a manifest contains, pass
+`--no-transcriptions` to `execute`.
 
 Editorial convention — **diplomatic, with uncertainty marked**:
 
