@@ -402,19 +402,18 @@ def cmd_execute(args):
         for index, doc in enumerate(documents, start=1):
             print(f"[{index}] photos={doc['photos']} "
                   f"title={doc.get('title')!r} date={doc.get('date')!r}")
-        if args.no_transcriptions:
-            print(f"\nSegment only: {pending} transcription(s) in the manifest "
-                  f"will be ignored." if pending else
-                  "\nSegment only: no transcriptions in the manifest.")
-        else:
+        if args.transcriptions:
             print(f"\n{pending} transcription(s) will be written.")
+        elif pending:
+            print(f"\nSegmentation only: {pending} transcription(s) in the "
+                  f"manifest will be ignored.")
         print(f"{len(documents)} documents, {len(assigned)} photos. "
               f"Nothing was changed.")
         return
 
-    if args.no_transcriptions and pending:
-        print(f"Segment only: ignoring {pending} transcription(s) in the "
-              f"manifest.")
+    if pending and not args.transcriptions:
+        print(f"Segmentation only: ignoring {pending} transcription(s) in the "
+              f"manifest. Pass --transcriptions to write them.")
 
     # A single document covering every photo needs no restructuring: write the
     # metadata onto the batch item itself rather than shuffling photos around
@@ -456,8 +455,8 @@ def cmd_execute(args):
             api.save_metadata(target, data)
 
         notes = 0
-        transcriptions = {} if args.no_transcriptions else (
-            doc.get("transcriptions") or {})
+        transcriptions = (
+            doc.get("transcriptions") or {}) if args.transcriptions else {}
         for photo_key, text in transcriptions.items():
             if not text:
                 continue
@@ -537,10 +536,9 @@ def main():
                     help="report what would be done, change nothing")
     ex.add_argument("--no-tag", action="store_true",
                     help=f"do not apply the {REVIEW_TAG!r} tag")
-    ex.add_argument("--no-transcriptions", action="store_true",
-                    dest="no_transcriptions",
-                    help="segment only: ignore any transcriptions in the "
-                         "manifest, leaving transcription to Tropy")
+    ex.add_argument("--transcriptions", action="store_true",
+                    help="also write any transcriptions the manifest carries; "
+                         "off by default -- Tropy transcribes via Transkribus")
     ex.set_defaults(func=cmd_execute)
 
     args = parser.parse_args()

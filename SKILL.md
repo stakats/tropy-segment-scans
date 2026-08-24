@@ -1,6 +1,6 @@
 ---
 name: tropy-segment-scans
-description: Split a batch-scanned Tropy item into document-level items. Use whenever you ask to "split" a Tropy dossier/batch item, break a folder of archive photos into separate documents (letters, memoranda, mémoires), or merge a batch of Tropy photos into discrete items. Works through Tropy's local API against the open project.
+description: Segment a batch-scanned Tropy item into document-level items. Use whenever you ask to "segment" or "split" a Tropy dossier/batch item, break a folder of archive photos into separate documents (letters, memoranda, mémoires), or merge a batch of Tropy photos into discrete items. Segmentation only -- Tropy transcribes via Transkribus. Works through Tropy's local API against the open project.
 allowed-tools: Bash(python3:*) Read
 ---
 
@@ -8,17 +8,18 @@ allowed-tools: Bash(python3:*) Read
 
 Turns one "whole dossier" Tropy item — dozens or hundreds of photos of an
 archive folder — into document-level items, with metadata inherited from the
-dossier, per-document metadata read off the page, and transcriptions for
-handwritten material.
+dossier and per-document metadata read off the page.
+
+**Segmentation only.** Do not transcribe; Tropy does that through Transkribus.
 
 Photos are **moved**, not copied: the workflow explodes them out of the batch
 item and merges them back into document groups, so no photo record is
 duplicated and every change lands in Tropy's undo history.
 
 > **Conventions are adaptable defaults.** The `for review` tag, the
-> "empty dossier shell" rule, the descriptive-title convention and the
-> diplomatic transcription style reflect one archival workflow. Adjust the
-> prose here and the constants in `scripts/tsegment.py` to match your own.
+> "empty dossier shell" rule and the descriptive-title convention reflect one
+> archival workflow. Adjust the prose here and the constants in
+> `scripts/tsegment.py` to match your own.
 
 ## Prerequisites
 
@@ -40,6 +41,10 @@ duplicated and every change lands in Tropy's undo history.
 - Segment documents from the **images**, not from any existing transcription.
 
 ## Workflow
+
+The researcher asks once — "segment the selected item" — and you run all four
+steps, pausing only to have the boundaries confirmed before anything is
+written. Do not make them drive the steps by hand.
 
 ### 1. Locate
 
@@ -81,10 +86,7 @@ date and signature are as often at the end as the beginning). Extract title,
 creator, date and type. Only these pages need full resolution, so a 40-document
 dossier costs ~80 close reads rather than 189.
 
-**Do not transcribe unless asked.** Segmenting is the default job; Tropy has
-its own transcription (Transkribus via mino), and it is better at handwriting
-than reading it off these images. Only when the researcher explicitly asks for
-transcriptions do you produce them, from the `full/` images — see
+**Do not transcribe.** That is not this skill's job — see
 [Transcription](#transcription).
 
 #### Finding document boundaries
@@ -219,26 +221,26 @@ instead — no point shuffling photos into an identical new item.
 ### 5. Report
 
 Tell the researcher: items created (ids + titles from `results.json`), any
-unassigned photos left on the shell, transcriptions attached, and that
-everything is tagged `for review`. On a Tropy without
-[#984](https://github.com/tropy/tropy/pull/984), add that transcriptions will
-not show up until the project is reopened (see below).
+unassigned photos left on the shell, any boundary you were unsure of, and that
+everything is tagged `for review`. Then point them at Tropy's transcription for
+the new items — until those are transcribed, they carry no searchable text.
 
 ## Transcription
 
-**Opt-in.** By default this skill segments and catalogues only, leaving the
-`transcriptions` key out of the manifest entirely. Tropy transcribes through
-Transkribus, which is purpose-built for handwriting; duplicating that here
-costs a full-resolution read of every page to produce a second-best result.
+**Not this skill's job.** Leave the `transcriptions` key out of the manifest.
+Tropy transcribes through Transkribus, which is purpose-built for handwriting;
+doing it here would mean a full-resolution read of every page for a second-best
+result. `execute` ignores transcriptions unless `--transcriptions` is passed.
 
-When the researcher does ask for transcriptions, they are read from the
-**image** and land in Tropy's native transcription store (not a note), so they
-sit where Tropy's own transcription feature puts them.
+Say so when reporting: segmenting gives correctly catalogued items, but a Tropy
+photo carries no text layer, so until they are transcribed the new items have
+no searchable text. Point the researcher at Tropy's transcription as the next
+step.
 
-To guarantee segmentation only regardless of what a manifest contains, pass
-`--no-transcriptions` to `execute`.
-
-Editorial convention — **diplomatic, with uncertainty marked**:
+If the researcher explicitly asks you to transcribe anyway, read from the
+`full/` images, put the text on the document's `transcriptions` map keyed by
+photo id, run `execute --transcriptions`, and follow a **diplomatic**
+convention with uncertainty marked:
 
 - Keep original spelling, accentuation and capitalisation (`j'ay`, `cy joint`,
   `isle`). Do not modernise.
@@ -250,11 +252,11 @@ Editorial convention — **diplomatic, with uncertainty marked**:
 
 ## Gotchas
 
-- **Transcriptions need [#984](https://github.com/tropy/tropy/pull/984) to show
-  up straight away.** Before that fix, `POST /transcriptions` wrote to the
-  database without updating application state, so neither the UI nor the API
-  saw a new transcription until the project reloaded. The data was always
-  there — on an older build, verify with the DB rather than a read-back.
+- **Only if you used `--transcriptions`:** on a Tropy without
+  [#984](https://github.com/tropy/tropy/pull/984), `POST /transcriptions`
+  writes to the database without updating application state, so neither the UI
+  nor the API sees the new transcription until the project reloads. The data is
+  there — verify with the DB rather than a read-back.
 - **Do not read back merged-away items.** After a merge, `GET /items/:id` on a
   merged-away item still reports its old photos and `deleted:false`, though the
   database has it correctly trashed. Trust the merge response.
