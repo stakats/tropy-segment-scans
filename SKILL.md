@@ -217,8 +217,9 @@ instead — no point shuffling photos into an identical new item.
 
 Tell the researcher: items created (ids + titles from `results.json`), any
 unassigned photos left on the shell, transcriptions attached, and that
-everything is tagged `for review`. **Mention that transcriptions do not appear
-until the project is reopened** (see below).
+everything is tagged `for review`. On a Tropy without
+[#984](https://github.com/tropy/tropy/pull/984), add that transcriptions will
+not show up until the project is reopened (see below).
 
 ## Transcription
 
@@ -238,10 +239,11 @@ Editorial convention — **diplomatic, with uncertainty marked**:
 
 ## Gotchas
 
-- **Transcriptions are invisible until the project is reopened.** Tropy's
-  `POST /transcriptions` writes to the database but does not update application
-  state, so neither the UI nor the API shows them until the project reloads.
-  The data is there — verify with the DB, not with a read-back.
+- **Transcriptions need [#984](https://github.com/tropy/tropy/pull/984) to show
+  up straight away.** Before that fix, `POST /transcriptions` wrote to the
+  database without updating application state, so neither the UI nor the API
+  saw a new transcription until the project reloaded. The data was always
+  there — on an older build, verify with the DB rather than a read-back.
 - **Do not read back merged-away items.** After a merge, `GET /items/:id` on a
   merged-away item still reports its old photos and `deleted:false`, though the
   database has it correctly trashed. Trust the merge response.

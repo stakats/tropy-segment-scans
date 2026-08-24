@@ -88,7 +88,7 @@ That last rule is the important one. A fluent guess is worse than a marked gap, 
 
 These are Tropy-side, not skill-side:
 
-- **Transcriptions don't appear until the project is reopened.** `POST /transcriptions` writes to the database but doesn't update application state. The data is there; the UI just hasn't heard about it.
+- **Transcriptions need [tropy#984](https://github.com/tropy/tropy/pull/984).** Before that fix, `POST /transcriptions` wrote to the database without updating application state, so a new transcription stayed invisible until the project was reopened. The data was always there; the UI just hadn't heard about it.
 - **Merged-away items read stale.** After a merge, `GET /items/:id` on a merged-away item still reports its old photos and `deleted:false`, though the database has it correctly trashed. Trust the merge response instead.
 
 ## Prerequisites
@@ -105,7 +105,7 @@ These are Tropy-side, not skill-side:
 Claude Code auto-discovers skills in `~/.claude/skills/`, in a folder whose name matches the skill and containing `SKILL.md`:
 
 ```bash
-git clone https://github.com/aaron-freedman/tropy-split-scans.git
+git clone https://github.com/stakats/tropy-split-scans.git
 mkdir -p ~/.claude/skills/tropy-split-scans
 cp -R tropy-split-scans/SKILL.md tropy-split-scans/scripts ~/.claude/skills/tropy-split-scans/
 ```

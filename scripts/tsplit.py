@@ -415,7 +415,7 @@ def cmd_execute(args):
     else:
         exploded = api.explode(item_id, assigned)
         photo_to_item = {}
-        for entry in exploded["items"]:
+        for entry in exploded["item"]:
             for photo in entry["photos"]:
                 photo_to_item[photo] = entry["id"]
         print(f"Exploded {len(assigned)} photos out of item {item_id}.")
@@ -434,7 +434,7 @@ def cmd_execute(args):
             item_ids = [photo_to_item[p] for p in photos]
             if len(item_ids) > 1:
                 merged = api.merge(item_ids)
-                target = merged["item"]
+                target = merged["id"]
             else:
                 target = item_ids[0]
 
