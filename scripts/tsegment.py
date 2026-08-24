@@ -35,6 +35,11 @@ WORKROOT = Path("/tmp/tropy-segment")
 DEFAULT_PORT = int(os.environ.get("TROPY_PORT", "2019"))
 REVIEW_TAG = "for review"
 
+# The API's form parser turns more than this many repeated keys into an object
+# keyed by index instead of an array (qs's arrayLimit), so list parameters are
+# sent in batches of at most this size.
+FORM_LIST_LIMIT = 20
+
 # Longest edge of the downscaled copies used for the boundary pass. Big enough
 # to see a change of hand, a signature block or a blank verso; small enough
 # that a whole dossier can be looked at without reading every page closely.
@@ -145,7 +150,23 @@ class Tropy:
         return self.get("/tags")
 
     def explode(self, item_id, photo_ids):
-        return self.post_form(f"/items/{item_id}/explode", {"photo": photo_ids})
+        """Move each photo onto a duplicate of its item; return {photo: item}.
+
+        Sent in batches because the form parser's `qs` turns more than 20
+        repeated keys into an object keyed by index rather than an array,
+        which arrives as a single NaN id. Exploding in batches is equivalent:
+        each call moves only the photos it names.
+        """
+        moves = {}
+        for i in range(0, len(photo_ids), FORM_LIST_LIMIT):
+            batch = photo_ids[i:i + FORM_LIST_LIMIT]
+            payload = self.post_form(
+                f"/items/{item_id}/explode", {"photo": batch})
+            for entry in payload["item"]:
+                for photo in entry["photos"]:
+                    if photo in batch:
+                        moves[photo] = entry["id"]
+        return moves
 
     def merge(self, item_ids):
         return self.post_form("/items/merge", {"item": item_ids})
@@ -442,11 +463,11 @@ def cmd_execute(args):
         print(f"Single document covering all photos -- updating item {item_id} "
               f"in place.")
     else:
-        exploded = api.explode(item_id, assigned)
-        photo_to_item = {}
-        for entry in exploded["item"]:
-            for photo in entry["photos"]:
-                photo_to_item[photo] = entry["id"]
+        photo_to_item = api.explode(item_id, assigned)
+        missing = [p for p in assigned if p not in photo_to_item]
+        if missing:
+            sys.exit(f"Explode did not report a new item for photos: "
+                     f"{missing}")
         print(f"Exploded {len(assigned)} photos out of item {item_id}.")
 
     tag_names = [REVIEW_TAG] if not args.no_tag else []
