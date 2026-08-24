@@ -14,10 +14,18 @@ Everything runs through **Tropy's local API** against the open project. The proj
 locate  ─►  inspect (Claude reads the page images)  ─►  write manifest  ─►  execute
 ```
 
-1. **Locate** — Given an item id (or whatever is selected in Tropy), it fetches the item's photos and downloads each one as a rendered JPEG — rotation, mirroring and adjustments applied, i.e. what Tropy *displays* rather than the raw file on disk. It also captures the dossier's own metadata and writes a chunk plan.
-2. **Inspect** — Claude reads the actual page images to decide where one document ends and the next begins, what each one is, and its title/creator/date. For long dossiers it works through overlapping windows of ~25 photos, so a document straddling a window boundary is still seen whole.
-3. **Write the manifest** — Claude writes a `manifest.json` grouping photo ids into documents, with per-document metadata and, for handwritten pages, a transcription.
-4. **Execute** — The script **moves** the photos into document-level items, writes the metadata, attaches the transcriptions, tags everything `for review`, and verifies the result.
+1. **Locate** — Given an item id (or whatever is selected in Tropy), it fetches the item's photos and downloads each one as a rendered JPEG — rotation, mirroring and adjustments applied, i.e. what Tropy *displays* rather than the raw file on disk — in two renditions: a downscaled `scan/` copy and the full-size `full/` one. It also captures the dossier's own metadata.
+2. **Inspect, in two passes** — Claude reads the *downscaled* images of every photo to find document boundaries, then the *full-resolution* first and last page of each document to read its metadata.
+3. **Write the manifest** — Claude writes a `manifest.json` grouping photo ids into documents, with per-document metadata and, optionally, transcriptions.
+4. **Execute** — The script **moves** the photos into document-level items, writes the metadata, attaches any transcriptions, tags everything `for review`, and verifies the result.
+
+### Why two passes
+
+Most photos in a dossier only have to answer one question — *does a new document start here?* — and that question survives downscaling, because its cues are visual: a change of hand, ink or paper, a salutation, a signature block, a blank verso, an address panel. Reading those at full resolution is wasted effort.
+
+So pass 1 looks at every photo small and decides boundaries only. Pass 2 goes back at full resolution to just the first and last page of each document, where the title, correspondent and date live. On a 189-photo dossier holding ~40 documents, that's ~80 close reads instead of 189.
+
+It also keeps segmentation independent of transcription, so transcription can be left to a dedicated tool (Transkribus, say) without changing how documents get found. A manifest with no `transcriptions` key produces items and metadata only.
 
 ## How the split actually works
 
@@ -87,7 +95,7 @@ These are Tropy-side, not skill-side:
 |---|---|
 | **Tropy with the local API enabled** | Preferences, or launch with `-p <port>`. The target project must be open. |
 | **The `api-explode-merge` branch** | Adds `explode`, `merge` and `nav` to the API. Stock Tropy cannot move photos between items. |
-| **Python 3.9+** | Standard library only — no dependencies to install. |
+| **Python 3.9+** | Standard library only. [Pillow](https://python-pillow.org/) is used for the pass-1 downscaling if it happens to be installed, `sips` on macOS otherwise; with neither, pass 1 falls back to full-size images. |
 | **Claude Code** | The script is standalone and can be driven by hand, but the workflow assumes Claude is doing the visual inspection. |
 
 ## Setup

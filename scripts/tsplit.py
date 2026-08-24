@@ -2,10 +2,12 @@
 """Split a batch-scanned Tropy item into document-level items.
 
 Subcommands:
-  locate  <item id | --selection>   Resolve the batch item, download each of its
-                                    photos as a rendered image for visual
-                                    inspection, and write batch.json, a chunk
-                                    plan and a manifest template to the workdir.
+  locate  <item id | --selection>   Resolve the batch item and download each of
+                                    its photos twice: a downscaled copy in
+                                    scan/ for the boundary pass, and the full
+                                    rendering in full/ for the metadata pass.
+                                    Writes batch.json, a pass-1 window plan and
+                                    a manifest template to the workdir.
   execute <workdir>/manifest.json   Move the photos into document-level items
                                     (explode + merge), write per-document
                                     metadata, attach transcriptions, verify.
@@ -21,7 +23,8 @@ as an empty dossier shell carrying the dossier-level metadata, tags and lists.
 import argparse
 import json
 import os
-import re
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -31,6 +34,11 @@ from pathlib import Path
 WORKROOT = Path("/tmp/tropy-split")
 DEFAULT_PORT = int(os.environ.get("TROPY_PORT", "2019"))
 REVIEW_TAG = "for review"
+
+# Longest edge of the downscaled copies used for the boundary pass. Big enough
+# to see a change of hand, a signature block or a blank verso; small enough
+# that a whole dossier can be looked at without reading every page closely.
+SCAN_EDGE = 1024
 
 # Tropy stores metadata as RDF properties. These are the ones the workflow
 # writes per document; everything else is inherited from the batch item.
@@ -160,6 +168,35 @@ class Tropy:
 # locate
 # ---------------------------------------------------------------------
 
+def downscale(src, dest, max_edge):
+    """Write a downscaled copy of `src` to `dest`.
+
+    Tropy's extract endpoint renders at full size only, so the boundary-pass
+    copies are made here. Pillow if it is installed, otherwise sips (macOS),
+    otherwise give up and let the caller fall back to the full rendering.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        pass
+    else:
+        with Image.open(src) as img:
+            img.draft("RGB", (max_edge, max_edge))  # cheap JPEG downscale
+            img = img.convert("RGB")
+            img.thumbnail((max_edge, max_edge), Image.LANCZOS)
+            img.save(dest, "JPEG", quality=75)
+        return True
+
+    if shutil.which("sips"):
+        result = subprocess.run(
+            ["sips", "-Z", str(max_edge), str(src), "--out", str(dest)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode == 0 and dest.exists():
+            return True
+
+    return False
+
+
 def resolve_item(api, args):
     if args.selection:
         nav = api.nav()
@@ -205,29 +242,50 @@ def cmd_locate(args):
     inherited = api.metadata(item_id)
 
     workdir = WORKROOT / str(item_id)
-    workdir.mkdir(parents=True, exist_ok=True)
+    full_dir = workdir / "full"
+    scan_dir = workdir / "scan"
+    for directory in (full_dir, scan_dir):
+        directory.mkdir(parents=True, exist_ok=True)
 
     pages = []
+    no_downscale = False
     for index, photo in enumerate(photos, start=1):
         # The extract endpoint renders the photo the way Tropy displays it
         # (rotation, mirroring and adjustments applied), which is what should
         # be inspected -- not the raw file on disk.
-        out = workdir / f"page-{index:03d}.jpg"
+        full_path = full_dir / f"page-{index:03d}.jpg"
+        scan_path = scan_dir / f"page-{index:03d}.jpg"
+        error = None
         try:
-            out.write_bytes(api.image(photo["id"]))
-            error = None
+            full_path.write_bytes(api.image(photo["id"]))
         except ApiError as err:
             error = str(err)
             print(f"WARNING: could not render photo {photo['id']}: {err}")
+
+        scan = None
+        if error is None:
+            if downscale(full_path, scan_path, args.scan_edge):
+                scan = str(scan_path)
+            else:
+                # No downscaler available: the boundary pass reads the full
+                # rendering instead. Correct, just more to look at.
+                no_downscale = True
+                scan = str(full_path)
+
         pages.append({
             "page": index,
             "photo": photo["id"],
-            "image": str(out) if error is None else None,
+            "full": str(full_path) if error is None else None,
+            "scan": scan,
             "filename": photo.get("filename"),
             "width": photo.get("width"),
             "height": photo.get("height"),
             "error": error,
         })
+
+    if no_downscale:
+        print("WARNING: no downscaler (install Pillow, or run on macOS for "
+              "sips) -- the boundary pass will use full-size renderings.")
 
     existing = []
     try:
@@ -272,9 +330,13 @@ def cmd_locate(args):
 
     print(json.dumps({k: v for k, v in batch.items() if k != "pages"}, indent=2))
     print(f"\n{len(pages)} photos -> {workdir}")
-    print(f"Inspection chunks (page ranges, overlapping): {chunks}")
-    print("Read every page image, then write manifest.json "
-          "(see manifest.template.json).")
+    print(f"  pass 1 (boundaries): {scan_dir}/page-*.jpg")
+    print(f"  pass 2 (metadata):   {full_dir}/page-*.jpg")
+    if len(chunks) > 1:
+        print(f"Pass 1 windows (page ranges, overlapping): {chunks}")
+    print("Read the scan/ images to find document boundaries, then the full/ "
+          "images of each document's first and last page for its metadata. "
+          "Then write manifest.json (see manifest.template.json).")
 
 
 # ---------------------------------------------------------------------
@@ -444,9 +506,14 @@ def main():
     group.add_argument("--selection", action="store_true",
                        help="use the item selected in Tropy")
     loc.add_argument("--chunk", type=int, default=25,
-                     help="photos per inspection chunk (default 25)")
+                     help="photos per pass-1 window (default 25)")
     loc.add_argument("--overlap", type=int, default=3,
-                     help="photos of overlap between chunks (default 3)")
+                     help="photos of overlap between pass-1 windows "
+                          "(default 3)")
+    loc.add_argument("--scan-edge", type=int, default=SCAN_EDGE,
+                     dest="scan_edge",
+                     help=f"longest edge of the pass-1 copies "
+                          f"(default {SCAN_EDGE})")
     loc.set_defaults(func=cmd_locate)
 
     ex = sub.add_parser("execute", help="split the batch item per the manifest")

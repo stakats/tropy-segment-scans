@@ -48,28 +48,41 @@ python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate <ITEM ID>
 python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate --selection
 ```
 
-Resolves the batch item, downloads every photo as a rendered JPEG (rotation,
+Resolves the batch item and downloads every photo as a rendered JPEG (rotation,
 mirroring and adjustments applied — what Tropy *displays*, not the raw file),
-and writes to `/tmp/tropy-split/<itemId>/`:
+in two renditions, to `/tmp/tropy-split/<itemId>/`:
 
-- `page-001.jpg` … one per photo, in item order
-- `batch.json` — photo ids, filenames, dimensions, the dossier's inherited
-  metadata, and the **chunk plan**
+- `scan/page-001.jpg` … downscaled to 1024px on the long edge — for pass 1
+- `full/page-001.jpg` … the full rendering — for pass 2
+- `batch.json` — photo ids, filenames, dimensions, both image paths, the
+  dossier's inherited metadata, and the pass-1 window plan
 - `manifest.template.json`
 
-### 2. Inspect visually, chunk by chunk
+### 2. Inspect in two passes
 
-**Read every page image** with the Read tool. `batch.json` gives a chunk plan —
-overlapping windows of ~25 photos — because a 189-photo dossier will not fit in
-one pass. The windows overlap by 3 photos so a document straddling a boundary is
-still seen whole; when a document is still open at the end of a window, close it
-in the next one rather than guessing.
+Reading every page closely is wasted effort: most photos only have to answer
+"does a new document start here?". So the inspection is split.
 
-Decide, for each document:
+**Pass 1 — boundaries, over `scan/`.** Read the downscaled images of *every*
+photo. Decide only where documents begin and end. The cues are visual and
+survive downscaling: a change of hand, ink or paper; a salutation opening a
+page; a signature block closing one; a blank or near-blank verso; an address
+panel. Do not try to read the text.
 
-- **Boundaries** — which photos belong together.
-- **Item metadata** — title, creator, date, type as visible on the document.
-- **Whether it is handwritten** → transcribe from the image.
+For a large dossier this still won't fit one context — `batch.json` gives
+overlapping windows of ~25 photos (3 photos of overlap). Work through them in
+order; when a document is still open at the end of a window, close it in the
+next one rather than guessing.
+
+**Pass 2 — metadata, over `full/`.** For each document found in pass 1, read
+the full-resolution image of its **first and last page** (in these letters the
+date and signature are as often at the end as the beginning). Extract title,
+creator, date and type. Only these pages need full resolution, so a 40-document
+dossier costs ~80 close reads rather than 189.
+
+Then, if transcription is in scope, transcribe handwritten documents from the
+`full/` images — see [Transcription](#transcription). Transcription is optional:
+a manifest with no `transcriptions` key produces items and metadata only.
 
 #### Document boundary cues
 
@@ -192,5 +205,8 @@ Editorial convention — **diplomatic, with uncertainty marked**:
 - **`locate --selection` needs exactly one item selected** in the project view.
   Tropy tracks one current photo, not a multi-photo selection, so the selection
   addresses items.
-- Large dossiers are slow to fetch — one rendered JPEG per photo. `locate` is
-  read-only and safe to re-run.
+- Large dossiers are slow to fetch — one rendered JPEG per photo, downscaled
+  locally afterwards. `locate` is read-only and safe to re-run.
+- Downscaling uses Pillow if installed, otherwise `sips` on macOS. With neither,
+  `locate` warns and pass 1 falls back to the full renderings — correct, just
+  more to look at. Override the size with `--scan-edge`.
