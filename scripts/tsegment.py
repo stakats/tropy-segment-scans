@@ -260,7 +260,7 @@ def cmd_locate(args):
             full_path.write_bytes(api.image(photo["id"]))
         except ApiError as err:
             error = str(err)
-            print(f"WARNING: could not render photo {photo['id']}: {err}")
+            full_path.unlink(missing_ok=True)
 
         scan = None
         if error is None:
@@ -282,6 +282,23 @@ def cmd_locate(args):
             "height": photo.get("height"),
             "error": error,
         })
+
+    failed = [p for p in pages if p["error"]]
+    if failed:
+        # Rendering happens inside Tropy, so a failure here is almost always
+        # Tropy being unable to read the file -- most often because macOS has
+        # not granted it access to the folder the photos live in.
+        print(f"\n{len(failed)} of {len(pages)} photos could not be rendered.")
+        print(f"  first error: {failed[0]['error']}")
+        print(f"  photo {failed[0]['photo']} is {photos[0].get('path')}")
+        if len(failed) == len(pages):
+            sys.exit(
+                "\nNo photos could be rendered, so there is nothing to "
+                "inspect.\nTropy itself could not read the image files. On "
+                "macOS this is usually a privacy permission: grant Tropy "
+                "access to the folder holding the photos under System "
+                "Settings > Privacy & Security > Files and Folders (or Full "
+                "Disk Access), then restart Tropy and re-run.")
 
     if no_downscale:
         print("WARNING: no downscaler (install Pillow, or run on macOS for "
