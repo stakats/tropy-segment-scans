@@ -1,4 +1,4 @@
-# tropy-split-scans
+# tropy-segment-scans
 
 A [Claude Code](https://docs.claude.com/en/docs/claude-code) **skill** that turns one batch-scanned archival item in your Tropy project into a clean set of document-level items — each with its own metadata, its own photos, and (for handwritten material) a transcription.
 
@@ -40,7 +40,7 @@ So the workflow explodes every assigned photo out of the dossier item — produc
 
 This has a pleasant side effect: because Explode duplicates the source item, **every new document item inherits the dossier's metadata for free** — identifier, archive, relation, source, rights, template, tags and lists all come across without being copied by hand. The manifest only supplies what is specific to the document.
 
-These three routes (`explode`, `merge`, and a read-only `nav` that exposes the current UI selection) are **not in stock Tropy** — they're added by the companion `api-explode-merge` branch.
+These three routes (`explode`, `merge`, and a read-only `nav` that exposes the current UI selection) are **not in stock Tropy** — they're added by [tropy#985](https://github.com/tropy/tropy/pull/985).
 
 ## What happens to the batch item
 
@@ -96,7 +96,7 @@ These are Tropy-side, not skill-side:
 | Requirement | Notes |
 |---|---|
 | **Tropy with the local API enabled** | Preferences, or launch with `-p <port>`. The target project must be open. |
-| **The `api-explode-merge` branch** | Adds `explode`, `merge` and `nav` to the API. Stock Tropy cannot move photos between items. |
+| **[tropy#985](https://github.com/tropy/tropy/pull/985)** | Adds `explode`, `merge` and `nav` to the API. Released Tropy cannot move photos between items. |
 | **Python 3.9+** | Standard library only. [Pillow](https://python-pillow.org/) is used for the pass-1 downscaling if it happens to be installed, `sips` on macOS otherwise; with neither, pass 1 falls back to full-size images. |
 | **Claude Code** | The script is standalone and can be driven by hand, but the workflow assumes Claude is doing the visual inspection. |
 
@@ -105,15 +105,15 @@ These are Tropy-side, not skill-side:
 Claude Code auto-discovers skills in `~/.claude/skills/`, in a folder whose name matches the skill and containing `SKILL.md`:
 
 ```bash
-git clone https://github.com/stakats/tropy-split-scans.git
-mkdir -p ~/.claude/skills/tropy-split-scans
-cp -R tropy-split-scans/SKILL.md tropy-split-scans/scripts ~/.claude/skills/tropy-split-scans/
+git clone https://github.com/stakats/tropy-segment-scans.git
+mkdir -p ~/.claude/skills/tropy-segment-scans
+cp -R tropy-segment-scans/SKILL.md tropy-segment-scans/scripts ~/.claude/skills/tropy-segment-scans/
 ```
 
 Prefer a symlink if you want to keep pulling updates:
 
 ```bash
-ln -s "$(pwd)/tropy-split-scans" ~/.claude/skills/tropy-split-scans
+ln -s "$(pwd)/tropy-segment-scans" ~/.claude/skills/tropy-segment-scans
 ```
 
 Then just ask, in natural language:
@@ -124,10 +124,10 @@ Then just ask, in natural language:
 You can also run the script directly:
 
 ```bash
-python3 scripts/tsplit.py locate 1069
-python3 scripts/tsplit.py locate --selection --chunk 25 --overlap 3
-python3 scripts/tsplit.py execute /tmp/tropy-split/1069/manifest.json --dry-run
-python3 scripts/tsplit.py execute /tmp/tropy-split/1069/manifest.json
+python3 scripts/tsegment.py locate 1069
+python3 scripts/tsegment.py locate --selection --chunk 25 --overlap 3
+python3 scripts/tsegment.py execute /tmp/tropy-segment/1069/manifest.json --dry-run
+python3 scripts/tsegment.py execute /tmp/tropy-segment/1069/manifest.json
 ```
 
 Useful flags: `--port` (default 2019), `--project` (a project id, or `current`), `--dry-run`, `--no-tag`.
@@ -135,17 +135,17 @@ Useful flags: `--port` (default 2019), `--project` (a project id, or `current`),
 ## Repository layout
 
 ```
-tropy-split-scans/
+tropy-segment-scans/
 ├── SKILL.md             # the skill definition Claude reads
 ├── scripts/
-│   └── tsplit.py        # the locate/execute implementation
+│   └── tsegment.py        # the locate/execute implementation
 ├── .gitignore
 └── LICENSE              # MIT
 ```
 
 ## Prior version
 
-This skill began as `zotero-split-scans`, which did the same job against a Zotero library and PDF batch scans. That version is preserved on the `main` branch.
+This skill began as [zotero-split-scans](https://github.com/stakats/zotero-split-scans), which did the same job against a Zotero library and PDF batch scans. That repository is kept as-is; this one carries its history forward.
 
 ## License
 

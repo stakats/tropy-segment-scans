@@ -31,7 +31,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-WORKROOT = Path("/tmp/tropy-split")
+WORKROOT = Path("/tmp/tropy-segment")
 DEFAULT_PORT = int(os.environ.get("TROPY_PORT", "2019"))
 REVIEW_TAG = "for review"
 

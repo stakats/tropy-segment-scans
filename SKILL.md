@@ -1,10 +1,10 @@
 ---
-name: tropy-split-scans
+name: tropy-segment-scans
 description: Split a batch-scanned Tropy item into document-level items. Use whenever you ask to "split" a Tropy dossier/batch item, break a folder of archive photos into separate documents (letters, memoranda, mémoires), or merge a batch of Tropy photos into discrete items. Works through Tropy's local API against the open project.
 allowed-tools: Bash(python3:*) Read
 ---
 
-# Tropy Split Scans
+# Tropy Segment Scans
 
 Turns one "whole dossier" Tropy item — dozens or hundreds of photos of an
 archive folder — into document-level items, with metadata inherited from the
@@ -18,15 +18,16 @@ duplicated and every change lands in Tropy's undo history.
 > **Conventions are adaptable defaults.** The `for review` tag, the
 > "empty dossier shell" rule, the descriptive-title convention and the
 > diplomatic transcription style reflect one archival workflow. Adjust the
-> prose here and the constants in `scripts/tsplit.py` to match your own.
+> prose here and the constants in `scripts/tsegment.py` to match your own.
 
 ## Prerequisites
 
 - **Tropy's local API must be enabled** and the target project open.
   Default port 2019 (2029 on beta/dev channels); override with `--port`.
-- **The `explode`, `merge` and `nav` routes must exist.** They are not in
-  stock Tropy — they come from the `api-explode-merge` branch. Without them
-  `execute` cannot move photos and will fail on the explode step.
+- **The `explode`, `merge` and `nav` routes must exist.** They are not yet in
+  released Tropy — they come from
+  [tropy#985](https://github.com/tropy/tropy/pull/985). Without them `execute`
+  cannot move photos and will fail on the explode step.
 
 ## Hard rules
 
@@ -43,14 +44,14 @@ duplicated and every change lands in Tropy's undo history.
 ### 1. Locate
 
 ```bash
-python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate <ITEM ID>
+python3 ~/.claude/skills/tropy-segment-scans/scripts/tsegment.py locate <ITEM ID>
 # or, acting on whatever is selected in Tropy:
-python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate --selection
+python3 ~/.claude/skills/tropy-segment-scans/scripts/tsegment.py locate --selection
 ```
 
 Resolves the batch item and downloads every photo as a rendered JPEG (rotation,
 mirroring and adjustments applied — what Tropy *displays*, not the raw file),
-in two renditions, to `/tmp/tropy-split/<itemId>/`:
+in two renditions, to `/tmp/tropy-segment/<itemId>/`:
 
 - `scan/page-001.jpg` … downscaled to 1024px on the long edge — for pass 1
 - `full/page-001.jpg` … the full rendering — for pass 2
@@ -198,10 +199,10 @@ Metadata rules:
 ### 4. Execute
 
 ```bash
-python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py execute \
-  /tmp/tropy-split/<itemId>/manifest.json --dry-run   # check first
-python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py execute \
-  /tmp/tropy-split/<itemId>/manifest.json
+python3 ~/.claude/skills/tropy-segment-scans/scripts/tsegment.py execute \
+  /tmp/tropy-segment/<itemId>/manifest.json --dry-run   # check first
+python3 ~/.claude/skills/tropy-segment-scans/scripts/tsegment.py execute \
+  /tmp/tropy-segment/<itemId>/manifest.json
 ```
 
 Validates the manifest against the live item (unknown photo ids and photos
