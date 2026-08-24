@@ -1,187 +1,141 @@
-# zotero-split-scans
+# tropy-split-scans
 
-A [Claude Code](https://docs.claude.com/en/docs/claude-code) **skill** that turns one batch-scanned archival PDF in your Zotero library into a clean set of per-document Zotero items — each with its own metadata, its own split PDF, and (for handwritten pages) a transcription note.
+A [Claude Code](https://docs.claude.com/en/docs/claude-code) **skill** that turns one batch-scanned archival item in your Tropy project into a clean set of document-level items — each with its own metadata, its own photos, and (for handwritten material) a transcription.
 
-It's built for a specific but common archive-research workflow: you sit in a reading room and scan a whole physical folder with a phone app, ending up with a single OCR'd PDF that actually contains a dozen different letters, memos, and clippings. This skill helps Claude pull that pile apart into properly catalogued items, using **visual** document recognition rather than trusting messy OCR.
+It's built for a specific but common archive-research workflow: you sit in a reading room and photograph a whole dossier, and it lands in Tropy as a single item holding a hundred-odd photos that are actually a dozen different letters, memoranda and *mémoires*. This skill helps Claude pull that pile apart into properly catalogued items, using **visual** document recognition rather than trusting OCR or an existing transcription.
+
+Everything runs through **Tropy's local API** against the open project. The project database is never touched directly, so every change lands in Tropy's undo history and stays in sync with the UI.
 
 ---
 
 ## What it does
 
-The skill runs in two scripted phases with a human-guided step in the middle. Claude drives all of it; you just confirm boundaries and metadata.
-
 ```
-locate  ─►  inspect (you + Claude look at the pages)  ─►  write manifest  ─►  execute
+locate  ─►  inspect (Claude reads the page images)  ─►  write manifest  ─►  execute
 ```
 
-1. **Locate** — Given an item key or a title query, it finds the batch item in your library, copies its PDF *out* of local Zotero storage (read-only), and extracts each page's embedded scan photo into a working directory along with an OCR preview of every page.
-2. **Inspect** — Claude reads the actual page images (not just the OCR text) to decide where one document ends and the next begins, what each one is (letter, memo, news clipping, manuscript…), and its title/author/date. Visual recognition is far more reliable than archival OCR.
-3. **Write the manifest** — Claude writes a `manifest.json` describing each target document: which scan pages it spans, its item type, creators, date, and an optional transcription for handwritten material.
-4. **Execute** — The script splits the source PDF per the manifest (preserving the OCR text layer), creates each Zotero item via the Web API, uploads its split PDF as an attachment, attaches transcription notes, and runs a verification pass. On a fully clean run it prepends `DONE ` to the batch item's title so finished folders stand out at a glance.
+1. **Locate** — Given an item id (or whatever is selected in Tropy), it fetches the item's photos and downloads each one as a rendered JPEG — rotation, mirroring and adjustments applied, i.e. what Tropy *displays* rather than the raw file on disk. It also captures the dossier's own metadata and writes a chunk plan.
+2. **Inspect** — Claude reads the actual page images to decide where one document ends and the next begins, what each one is, and its title/creator/date. For long dossiers it works through overlapping windows of ~25 photos, so a document straddling a window boundary is still seen whole.
+3. **Write the manifest** — Claude writes a `manifest.json` grouping photo ids into documents, with per-document metadata and, for handwritten pages, a transcription.
+4. **Execute** — The script **moves** the photos into document-level items, writes the metadata, attaches the transcriptions, tags everything `for review`, and verifies the result.
 
-Every new item is tagged **`for review`** and filed into the batch item's deepest collection, with Archive and "Loc. in Archive" fields copied down from the batch item automatically.
+## How the split actually works
 
-## How it handles Zotero metadata
+Tropy has no "split this item into these groups" operation, but it has two primitives that compose into exactly that — both already undoable, both used by the UI:
 
-Each new item is assembled from **Zotero's own item template** for its type — the script calls `item_template(itemType)` first, so the item only ever carries fields Zotero recognizes for that type, and the Web API won't reject it for stray fields. Three streams of metadata then flow into that template:
+- **Explode** moves each listed photo onto a *duplicate* of its item.
+- **Merge** folds several items' photos, tags and lists back into one.
 
-1. **Inherited from the batch item (automatic — never in the manifest).** The `archive` and `archiveLocation` ("Loc. in Archive") fields are copied straight down, and the batch item's tags are carried onto every child, with **`for review`** always appended. This is what keeps provenance consistent across an entire folder without you retyping it.
-2. **Supplied per document (the manifest).** Claude fills in `itemType`, `title`, `creators`, and `date` for each document from what it *sees* on the page. Creators use Zotero's structured shape — `{"creatorType": "...", "firstName": "...", "lastName": "..."}` (or a single `"name"`) — so a letter can carry both an `author` and a `recipient`.
-3. **Filing.** The item is placed only into the manifest's `collections` (the batch item's deepest subcollection), not its parents.
+So the workflow explodes every assigned photo out of the dossier item — producing one single-photo item per photo, each a copy of the dossier — and then merges each document's photos back together. Photos are reassigned, never duplicated.
 
-A few deliberate rules make the metadata clean rather than just present:
+This has a pleasant side effect: because Explode duplicates the source item, **every new document item inherits the dossier's metadata for free** — identifier, archive, relation, source, rights, template, tags and lists all come across without being copied by hand. The manifest only supplies what is specific to the document.
 
-- **Item-type mapping.** `letter` covers letters *and* memoranda; `newspaperArticle` / `magazineArticle` are for press clippings; `manuscript` is the catch-all default for everything else.
-- **Titles vs. letters.** Every item needs a `title` — *except* letters, which may stand on an `author` creator alone. The skill deliberately **never fabricates a title beginning `[Letter…`**, because that bracketed string is Zotero's *auto-generated display title*; it leaves the field empty and lets Zotero render it, so the catalogue stays free of fake titles.
-- **Optional type-aware fields.** `letterType`, `publicationTitle`, `place`, `abstractNote`, `manuscriptType`, `numPages`, and `section` are passed through only when you provide them *and* the chosen item type actually has that field — so you never get an `abstractNote` jammed onto a type that has no such slot.
-- **The two meanings of "pages."** In the manifest, `pages` is a *list of scan-page numbers* selecting which images make up the document. But several article types also have a *bibliographic* `pages` field that Zotero expects to be a **string** page range (e.g. `"42-48"`). To keep these from colliding, the printed range is given under a separate `bibPages` key and written into Zotero's `pages`; the scan selector stays a list. Mixing them up would make the API reject the item.
-- **Verification.** After creating everything, the script re-fetches each new item's children and prints them, so you can confirm the split PDF (and any note) actually attached rather than trusting the create call alone.
+These three routes (`explode`, `merge`, and a read-only `nav` that exposes the current UI selection) are **not in stock Tropy** — they're added by the companion `api-explode-merge` branch.
+
+## What happens to the batch item
+
+It survives, as an **empty dossier shell**: all its photos move out, but it keeps the dossier-level metadata, tags and lists. That shell is the record of the folder as a physical archival unit, and it means the workflow never deletes anything.
+
+If some photos are left unassigned in the manifest, they stay on the shell and the script warns rather than failing — blank versos and separator shots often belong nowhere.
+
+## How it handles metadata
+
+Tropy stores metadata as RDF properties, so the script writes property URIs directly:
+
+| Manifest field | Property | Type |
+|---|---|---|
+| `title` | `dc:title` | string |
+| `creator` | `dc:creator` | string |
+| `date` | `dc:date` | `tropy:date` — so `1777-1778` parses as a range |
+| `type` | `dc:type` | string |
+| `description` | `dc:description` | string |
+
+Two deliberate conventions:
+
+- **Titles are descriptive and document-specific** — `"Bourgeat à la Société royale de médecine"`, not the dossier's author-name title repeated on every document. The correspondent goes in `creator`.
+- **Inherited fields never appear in the manifest.** Anything the dossier already carries comes across automatically; putting it in the manifest would just be a chance to get it wrong.
 
 ## How it handles handwriting
 
-Archival OCR is shaky on cursive and annotations, so the skill **does not trust the embedded OCR layer for handwritten material** — it routes around it entirely:
+Archival OCR is shaky on 18th-century cursive, so the skill routes around it: Claude reads the *image* and produces the transcription from what it sees. The result goes into **Tropy's native transcription store** — the same place Tropy's own transcription feature writes — rather than into a note.
 
-- **Visual transcription, not OCR.** During the inspection step, Claude is told to read the *image* of any handwritten page and produce the transcription from what it sees, ignoring the OCR preview.
-- **Carried in the manifest.** That text lives on the document's `transcription` field — plain text for handwritten documents, `null` for typed ones.
-- **Stored as a child note.** On execution, a non-`null` transcription becomes a **Zotero child note** attached to the item: newlines are converted to `<br/>`, the body is wrapped as `<p><b>Transcription</b></p><p>…</p>`, and the note is tagged `for review` like everything else.
+The editorial convention is **diplomatic, with uncertainty marked**:
 
-The net effect is a clean division of labor: typed documents keep their machine OCR layer (the split preserves it, so they stay full-text searchable in Zotero), while handwritten ones gain a human-grade transcription note that the OCR could never have produced. A handwritten letter therefore lands in your library as three linked pieces — the catalogued item, its split PDF attachment, and the transcription note — all flagged `for review`.
+- Original spelling, accentuation and capitalisation preserved (`j'ay`, `cy joint`, `isle`); nothing modernised.
+- Original line breaks preserved.
+- Doubtful readings marked `[cette isle?]`, unreadable ones `[illisible]`.
+
+That last rule is the important one. A fluent guess is worse than a marked gap, because later on it can't be told apart from a real reading.
 
 ## Assumptions
 
-This skill encodes a particular workflow. None of these are hard technical limits, but the defaults assume:
+- **One Tropy item per dossier, many documents inside.** The source is a batch item holding the photos of a whole archive folder.
+- **The API is enabled and the project is open.** Port 2019 by default (2029 on beta/dev channels).
+- **Visual inspection happens.** The whole point is that Claude *looks at the pages*.
+- **The conventions are yours to change** — the `for review` tag, the empty-shell rule, the title convention and the transcription style are defaults, not requirements.
 
-- **One PDF per physical folder, many documents inside.** The source items are "whole folder" batch scans, typically titled something like `[Folder 42, Box 1]`.
-- **PDFs come from [vFlat](https://www.vflat.com/) (or a similar phone scanner).** Each page is expected to hold exactly one embedded JPEG (the camera photo) under an invisible OCR text layer. The script extracts that original photo; if a page doesn't fit the one-image pattern it falls back to rasterizing at 200 dpi.
-- **Your Zotero desktop client is installed and synced.** The fast path reads the PDF straight from `~/Zotero/storage/`; if the local copy isn't there it falls back to downloading via the API. A just-scanned item that hasn't synced yet won't be found.
-- **Visual inspection happens.** The whole point is that Claude *looks at the pages*. The OCR previews exist only to orient, not to segment from.
-- **The conventions are yours to change.** The `for review` tag, the `DONE ` marker, the letter/manuscript/article item-type mapping, and the "deepest collection only" rule are sensible defaults for one archive's workflow — edit `SKILL.md` and the constants in `scripts/zsplit.py` to match your own.
+## Known wrinkles
 
-## Safety guarantees
+These are Tropy-side, not skill-side:
 
-These are enforced in the script, not just documented:
-
-- **Local Zotero storage is treated as read-only.** Nothing is ever written under `~/Zotero/`; the PDF is *copied out* to a temp workdir. Every write goes through the Zotero Web API.
-- **The batch item is never deleted and its content is never altered.** The only edit ever made to it is prepending `DONE ` to its title — and only after every document was created successfully. That marker is idempotent (re-runs won't stack `DONE DONE `), and any creation failure leaves the title unmarked, so `DONE` always means "fully split."
+- **Transcriptions don't appear until the project is reopened.** `POST /transcriptions` writes to the database but doesn't update application state. The data is there; the UI just hasn't heard about it.
+- **Merged-away items read stale.** After a merge, `GET /items/:id` on a merged-away item still reports its old photos and `deleted:false`, though the database has it correctly trashed. Trust the merge response instead.
 
 ## Prerequisites
 
 | Requirement | Notes |
 |---|---|
-| **A Zotero account + Web API key** | Create a read/write key at <https://www.zotero.org/settings/security>. You also need your library ID (your numeric userID, shown on that same page, or a group ID). |
-| **Zotero desktop client, synced** | For the fast local-storage read path. The skill still works via API download if a local file is missing, but expects the item to exist in the synced library. |
-| **Python 3.9+** with the deps in [`requirements.txt`](requirements.txt) | `PyMuPDF` (image extraction), `pypdf` (splitting), `pyzotero` (Web API), `httpx`. Developed against Python 3.12. |
-| **Claude Code** | The skill is written for Claude Code's skill system. The Python script itself is standalone and can be run by hand, but the workflow assumes Claude is driving and doing the visual inspection. |
+| **Tropy with the local API enabled** | Preferences, or launch with `-p <port>`. The target project must be open. |
+| **The `api-explode-merge` branch** | Adds `explode`, `merge` and `nav` to the API. Stock Tropy cannot move photos between items. |
+| **Python 3.9+** | Standard library only — no dependencies to install. |
+| **Claude Code** | The script is standalone and can be driven by hand, but the workflow assumes Claude is doing the visual inspection. |
 
-## Setup in Claude
+## Setup
 
-Claude Code auto-discovers skills placed in `~/.claude/skills/`. The skill must live in a folder whose name matches the skill (`zotero-split-scans`) and must contain `SKILL.md`.
-
-**1. Install the skill files**
+Claude Code auto-discovers skills in `~/.claude/skills/`, in a folder whose name matches the skill and containing `SKILL.md`:
 
 ```bash
-# Clone, then copy (or symlink) the skill into your Claude skills directory
-git clone https://github.com/aaron-freedman/zotero-split-scans.git
-mkdir -p ~/.claude/skills/zotero-split-scans
-cp -R zotero-split-scans/SKILL.md zotero-split-scans/scripts ~/.claude/skills/zotero-split-scans/
+git clone https://github.com/aaron-freedman/tropy-split-scans.git
+mkdir -p ~/.claude/skills/tropy-split-scans
+cp -R tropy-split-scans/SKILL.md tropy-split-scans/scripts ~/.claude/skills/tropy-split-scans/
 ```
 
-> Prefer a symlink (`ln -s "$(pwd)/zotero-split-scans" ~/.claude/skills/zotero-split-scans`) if you want to keep pulling updates from the repo. Either way, Claude looks for `~/.claude/skills/zotero-split-scans/SKILL.md`.
-
-**2. Install the Python dependencies**
+Prefer a symlink if you want to keep pulling updates:
 
 ```bash
-pip install -r zotero-split-scans/requirements.txt
+ln -s "$(pwd)/tropy-split-scans" ~/.claude/skills/tropy-split-scans
 ```
 
-Use whatever Python environment `python3` resolves to in your shell — that's the interpreter the skill invokes.
+Then just ask, in natural language:
 
-**3. Provide your Zotero credentials**
+> "Split the dossier item 1069 into separate documents."
+> "Break the selected Tropy item into its individual letters."
 
-The script reads three variables from `~/.zotero_env` at runtime. Copy the template and fill in your own values:
+You can also run the script directly:
 
 ```bash
-cp zotero-split-scans/.zotero_env.example ~/.zotero_env
-# then edit ~/.zotero_env:
-#   ZOTERO_LIBRARY_ID=1234567
-#   ZOTERO_LIBRARY_TYPE=user      # or "group"
-#   ZOTERO_API_KEY=...            # your read/write Web API key
+python3 scripts/tsplit.py locate 1069
+python3 scripts/tsplit.py locate --selection --chunk 25 --overlap 3
+python3 scripts/tsplit.py execute /tmp/tropy-split/1069/manifest.json --dry-run
+python3 scripts/tsplit.py execute /tmp/tropy-split/1069/manifest.json
 ```
 
-No credentials are stored in the repo. `~/.zotero_env` lives in your home directory, outside the skill folder, and is `.gitignore`d here defensively.
-
-**4. Use it**
-
-In Claude Code, just ask in natural language — the skill's description triggers on requests like:
-
-> "Split the batch scan titled `[Folder 42, Box 1]`."
-> "Break item `ABCD1234` into separate documents."
-
-Claude will run `locate`, show you the pages it found, propose document boundaries and metadata, write the manifest, and (after you're happy) run `execute` and report back the new item keys, links, and any warnings.
-
-You can also run the script directly, without Claude:
-
-```bash
-python3 ~/.claude/skills/zotero-split-scans/scripts/zsplit.py locate "[Folder 42, Box 1]"
-# ...inspect the page images, hand-write manifest.json...
-python3 ~/.claude/skills/zotero-split-scans/scripts/zsplit.py execute /tmp/zotero-split/<batchKey>/manifest.json
-```
-
-## Porting to Codex
-
-The skill format is cross-runtime: [Codex](https://developers.openai.com/codex) discovers skills the same way Claude Code does — a subdirectory containing a `SKILL.md` with `name`/`description` frontmatter — so **no rewrite of the skill is required.** Only the install location, a couple of paths, and one capability check differ.
-
-**1. Install into Codex's skills directory**
-
-User-level Codex skills live at `$CODEX_HOME/skills/` (default `~/.codex/skills/`). Codex *also* reads the cross-runtime path `~/.agents/skills/`, which Copilot CLI and Gemini CLI share — install there instead if you want one copy to serve every runtime.
-
-```bash
-git clone https://github.com/aaron-freedman/zotero-split-scans.git
-mkdir -p ~/.codex/skills/zotero-split-scans                       # or ~/.agents/skills/zotero-split-scans
-cp -R zotero-split-scans/SKILL.md zotero-split-scans/scripts ~/.codex/skills/zotero-split-scans/
-```
-
-**2. Dependencies and credentials are identical**
-
-Nothing here is harness-specific. Install the same Python deps, and the script reads the same `~/.zotero_env` (a home-directory file, not tied to Claude or Codex):
-
-```bash
-pip install -r zotero-split-scans/requirements.txt
-cp zotero-split-scans/.zotero_env.example ~/.zotero_env   # then fill in your values
-```
-
-**3. Adjust the invocation paths**
-
-`SKILL.md` spells out its commands as `python3 ~/.claude/skills/zotero-split-scans/scripts/zsplit.py …`. After a Codex install, substitute the path you installed to:
-
-```bash
-python3 ~/.codex/skills/zotero-split-scans/scripts/zsplit.py locate "[Folder 42, Box 1]"
-python3 ~/.codex/skills/zotero-split-scans/scripts/zsplit.py execute /tmp/zotero-split/<batchKey>/manifest.json
-```
-
-The script *itself* needs no edits — its only absolute paths are `~/.zotero_env`, `~/Zotero/storage/` (read-only source), and the `/tmp/zotero-split/` workdir, all of which are harness-independent. If you'd rather not edit paths by hand, replace the `~/.claude/...` prefix throughout your installed `SKILL.md` with `~/.codex/...`.
-
-**4. Two behavioral differences to know**
-
-- **The `allowed-tools` frontmatter is inert on Codex.** That line (`allowed-tools: Bash(python3:*) Read`) is a Claude Code permission declaration. Codex doesn't gate tools per-skill — it reads files via `shell`, edits via `apply_patch`, and runs `python3` via `shell`, with access governed by its sandbox/approval config (`~/.codex/config.toml`), not the skill. You can leave the line in place; Codex only requires `name` and `description`. Make sure your Codex sandbox/approval settings actually permit running `python3` and reaching the network (the Zotero Web API).
-- **Verify visual image inspection — this is the one capability the skill leans on.** Its accuracy comes from the model *looking at* each `page-XXX.jpeg`, not from OCR. In Claude Code the `Read` tool renders images into the model's view; on Codex, confirm your build/model surfaces local image files to the model during a run. If it can't, the document-segmentation and handwriting-transcription steps degrade to the embedded OCR text — which this skill explicitly distrusts — so the results will be markedly weaker. Treat working image viewing as a prerequisite, not a nicety.
-
-**5. Use it**
-
-Codex loads skills natively and triggers them by matching your request against the `description`, exactly like Claude Code. Ask in natural language ("split the batch scan titled `[Folder 42, Box 1]`") and Codex will run the same `locate` → inspect → manifest → `execute` flow.
+Useful flags: `--port` (default 2019), `--project` (a project id, or `current`), `--dry-run`, `--no-tag`.
 
 ## Repository layout
 
 ```
-zotero-split-scans/
-├── SKILL.md             # the skill definition the agent reads (workflow, rules, gotchas)
+tropy-split-scans/
+├── SKILL.md             # the skill definition Claude reads
 ├── scripts/
-│   └── zsplit.py        # the locate/execute implementation
-├── requirements.txt     # Python dependencies
-├── .zotero_env.example  # credentials template — copy to ~/.zotero_env
+│   └── tsplit.py        # the locate/execute implementation
 ├── .gitignore
 └── LICENSE              # MIT
 ```
+
+## Prior version
+
+This skill began as `zotero-split-scans`, which did the same job against a Zotero library and PDF batch scans. That version is preserved on the `main` branch.
 
 ## License
 

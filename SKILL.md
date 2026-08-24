@@ -1,65 +1,121 @@
 ---
-name: zotero-split-scans
-description: Split a batch-scanned archival PDF in your Zotero library into document-level items. Use whenever you ask to "split" a Zotero folder/batch scan item (e.g. an item titled "[Folder N, Box X]"), break a multi-document archive scan into separate items, or process a new batch scan from the archive. The batch PDFs are assumed to come from the vFlat iPhone app — one OCR'ed PDF per physical archive folder, with multiple documents inside.
+name: tropy-split-scans
+description: Split a batch-scanned Tropy item into document-level items. Use whenever you ask to "split" a Tropy dossier/batch item, break a folder of archive photos into separate documents (letters, memoranda, mémoires), or merge a batch of Tropy photos into discrete items. Works through Tropy's local API against the open project.
 allowed-tools: Bash(python3:*) Read
 ---
 
-# Zotero Split Scans
+# Tropy Split Scans
 
-Splits one "whole folder" batch scan item into per-document Zotero items, with metadata copied from the batch item and visual (not OCR-trusting) document identification.
+Turns one "whole dossier" Tropy item — dozens or hundreds of photos of an
+archive folder — into document-level items, with metadata inherited from the
+dossier, per-document metadata read off the page, and transcriptions for
+handwritten material.
 
-> **Conventions are adaptable defaults.** The choices below — the `for review` tag, the `DONE ` title marker, the vFlat-style "one embedded photo per page" assumption, the letter/manuscript/article item-type mapping, and the "deepest collection only" rule — reflect one archival workflow. They are sensible defaults, not requirements; adjust the prose here and the constants in `scripts/zsplit.py` (e.g. `DONE_PREFIX`) to match your own library.
+Photos are **moved**, not copied: the workflow explodes them out of the batch
+item and merges them back into document groups, so no photo record is
+duplicated and every change lands in Tropy's undo history.
+
+> **Conventions are adaptable defaults.** The `for review` tag, the
+> "empty dossier shell" rule, the descriptive-title convention and the
+> diplomatic transcription style reflect one archival workflow. Adjust the
+> prose here and the constants in `scripts/tsplit.py` to match your own.
+
+## Prerequisites
+
+- **Tropy's local API must be enabled** and the target project open.
+  Default port 2019 (2029 on beta/dev channels); override with `--port`.
+- **The `explode`, `merge` and `nav` routes must exist.** They are not in
+  stock Tropy — they come from the `api-explode-merge` branch. Without them
+  `execute` cannot move photos and will fail on the explode step.
 
 ## Hard rules
 
-- **Never write under `~/Zotero/`** (storage, settings, database). Local storage is read-only; every write goes through the Zotero web API.
-- **Never delete the batch item, and leave its content alone.** The single allowed edit: on a clean `execute` run, the script prepends `DONE ` to its title (e.g. `[Folder 42, Box 1]` → `DONE [Folder 42, Box 1]`) so processed folders stand out in the library. Its PDF, tags, collections, and other metadata are never touched.
-- All new items get the **`for review`** tag.
-- New items go into the batch item's **deepest collection only** (the folder-level subcollection, e.g. "folder 42, box 1.2.1") — not parent collections, not anywhere else, unless you say otherwise.
+- **Never write to the `.tpy` file directly.** Every change goes through the
+  local API so it stays in Tropy's undo history and in sync with the UI.
+- **Never delete the batch item.** Once its photos are moved out it remains as
+  an **empty dossier shell**, keeping the dossier-level metadata, tags and
+  lists. That shell is the record of the folder as a physical unit.
+- All new items get the **`for review`** tag (on top of the tags they inherit).
+- Segment documents from the **images**, not from any existing transcription.
 
 ## Workflow
 
 ### 1. Locate
 
 ```bash
-python3 ~/.claude/skills/zotero-split-scans/scripts/zsplit.py locate <ITEMKEY or "title query">
+python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate <ITEM ID>
+# or, acting on whatever is selected in Tropy:
+python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py locate --selection
 ```
 
-Resolves the batch item, copies its PDF out of local Zotero storage (`~/Zotero/storage/<attKey>/`, API download as fallback), extracts each page's embedded scan photo to the workdir `/tmp/zotero-split/<batchKey>/`, and writes `batch.json` (metadata + per-page OCR previews) and `manifest.template.json`.
+Resolves the batch item, downloads every photo as a rendered JPEG (rotation,
+mirroring and adjustments applied — what Tropy *displays*, not the raw file),
+and writes to `/tmp/tropy-split/<itemId>/`:
 
-vFlat pages each contain exactly one embedded JPEG (the camera photo) under an invisible OCR text layer — the script extracts the original photo; it only rasterizes as a fallback.
+- `page-001.jpg` … one per photo, in item order
+- `batch.json` — photo ids, filenames, dimensions, the dossier's inherited
+  metadata, and the **chunk plan**
+- `manifest.template.json`
 
-### 2. Inspect visually
+### 2. Inspect visually, chunk by chunk
 
-**Read every page image** (`page-001.jpeg`, …) with the Read tool. Do not segment documents from the OCR previews alone — your visual recognition is more accurate. Decide:
+**Read every page image** with the Read tool. `batch.json` gives a chunk plan —
+overlapping windows of ~25 photos — because a 189-photo dossier will not fit in
+one pass. The windows overlap by 3 photos so a document straddling a boundary is
+still seen whole; when a document is still open at the end of a window, close it
+in the next one rather than guessing.
 
-- Document boundaries (which pages belong together — letterheads, signatures, page numbers, paper/handwriting changes are the cues)
-- Item type per document:
-  - `letter` — letters **and memoranda**
-  - `newspaperArticle` / `magazineArticle` — press clippings
-  - `manuscript` — everything else (default)
-- Title, creators, date as visible on the document
-- Whether any page is **handwritten** → produce a transcription from the image (do not rely on OCR)
+Decide, for each document:
+
+- **Boundaries** — which photos belong together.
+- **Item metadata** — title, creator, date, type as visible on the document.
+- **Whether it is handwritten** → transcribe from the image.
+
+#### Document boundary cues
+
+<!-- TODO: confirm with the researcher which of these actually hold for this
+     collection, and how the dossiers are physically structured (bifolios,
+     blank versos, address panels, folder covers, enclosures). -->
+
+For 18th-century French manuscript correspondence, the reliable visual signals
+are usually:
+
+- **Opening and closing formulas** — a salutation (`Monsieur`, `Monseigneur`)
+  starts a document; a subscription and signature (`votre très humble et très
+  obéissant serviteur`) ends one.
+- **A change of hand, ink or paper** — the single strongest cue, and one that
+  only works visually.
+- **The address panel or *dos*** — a folded bifolio often carries the address,
+  and sometimes an archival note, on an otherwise blank outer face. That face
+  belongs to the letter it wraps, and typically marks its end.
+- **Blank or near-blank versos** — usually the tail of a document, not a
+  document of their own.
+- **Archival foliation and dossier covers** — numbering restarts, or a cover
+  sheet names the correspondent, at the start of a new unit.
+
+Enclosures (a *mémoire*, certificate or list travelling with a covering letter)
+are a judgement call: keep them with the letter when the letter refers to them
+and they carry no independent identity; make them their own item when they are
+substantial and separately titled.
 
 ### 3. Write the manifest
 
-Write `manifest.json` in the workdir (start from `manifest.template.json`):
+Write `manifest.json` in the workdir. `photos` holds **photo ids** (from
+`batch.json`), not page numbers:
 
 ```json
 {
-  "batch_key": "XXXXXXXX",
-  "collections": ["<deepest collection key only>"],
+  "item": 1069,
   "documents": [
     {
-      "pages": [1, 2],
-      "itemType": "letter",
-      "title": "",
-      "creators": [
-        {"creatorType": "author", "firstName": "Clay", "lastName": "Myers"},
-        {"creatorType": "recipient", "firstName": "…", "lastName": "…"}
-      ],
-      "date": "1983-07-25",
-      "transcription": null
+      "photos": [1070, 1072],
+      "title": "Bourgeat à la Société royale de médecine",
+      "creator": "Bourgeat, Joseph",
+      "date": "1759-03-12",
+      "type": "Correspondence",
+      "transcriptions": {
+        "1070": "Monsieur, j'ay l'honneur de vous adresser le mémoire cy joint…"
+      }
     }
   ]
 }
@@ -67,29 +123,74 @@ Write `manifest.json` in the workdir (start from `manifest.template.json`):
 
 Metadata rules:
 
-- Every item needs a `title` — except letters, which may instead have at least an `author` creator. **Never invent a title starting with `[Letter`** (that pattern is Zotero's auto-generated display title; leave letter titles empty instead).
-- `date` as written on the document (ISO if a full date is known).
-- `transcription`: plain text for handwritten documents; becomes a child note. `null` otherwise.
-- Optional per-document fields passed through when the item type supports them: `letterType`, `publicationTitle`, `place`, `abstractNote`, `manuscriptType`, `numPages`, `section`. For an article's printed page range use `bibPages` (a string like `"42-48"`) — **not** `pages`, which is reserved for selecting the scan pages of the document.
-- Tags, Archive, and Loc. in Archive are copied from the batch item automatically — don't put them in the manifest.
+- **Inherited automatically — never put these in the manifest.** The new items
+  are duplicates of the batch item, so they already carry its identifier,
+  archive, relation, source, rights, template, tags and lists.
+- **`title`** is descriptive and document-specific
+  (`"Bourgeat à la Société royale de médecine"`,
+  `"Mémoire sur les fièvres de Saint-Domingue"`), with the correspondent in
+  `creator`. Do not reuse the dossier's author-name title.
+- **`date`** as written on the document, ISO when a full date is legible. It is
+  written as a Tropy date, so ranges like `1777-1778` parse correctly.
+- **`type`** — `Correspondence` for letters and memoranda sent as letters,
+  `Memorandum` for *mémoires*, otherwise what the document is.
+- **`transcriptions`** maps a photo id to its text. Only for handwritten pages.
 
 ### 4. Execute
 
 ```bash
-python3 ~/.claude/skills/zotero-split-scans/scripts/zsplit.py execute /tmp/zotero-split/<batchKey>/manifest.json
+python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py execute \
+  /tmp/tropy-split/<itemId>/manifest.json --dry-run   # check first
+python3 ~/.claude/skills/tropy-split-scans/scripts/tsplit.py execute \
+  /tmp/tropy-split/<itemId>/manifest.json
 ```
 
-Splits the PDF with pypdf (preserves the OCR text layer), creates the items, uploads each split PDF, adds transcription notes, then runs a verification pass listing each new item's children. Warns if any batch pages were left unassigned.
+Validates the manifest against the live item (unknown photo ids and photos
+assigned twice are fatal; unassigned photos only warn and stay on the shell),
+then explodes the photos out, merges each document's photos into one item,
+writes the per-document metadata, attaches transcriptions, applies `for review`,
+and verifies each new item's photo list.
 
-When every document is created successfully, it finally prepends `DONE ` to the batch item's title — your at-a-glance signal in the library for which folders are processed. This is idempotent (a re-run won't stack `DONE DONE`), and a run where any item failed to create leaves the title unmarked so `DONE` always means "fully split". Unassigned pages only warn; they don't block the marker.
+If a single document covers every photo, the batch item is updated in place
+instead — no point shuffling photos into an identical new item.
 
 ### 5. Report
 
-Tell the user: items created (keys + labels + web links from `results.json`), any attachment/note failures, any unassigned pages, whether the batch item was marked `DONE` (and if not, why — e.g. a creation failure left it unmarked), and a reminder that everything is tagged `for review`.
+Tell the researcher: items created (ids + titles from `results.json`), any
+unassigned photos left on the shell, transcriptions attached, and that
+everything is tagged `for review`. **Mention that transcriptions do not appear
+until the project is reopened** (see below).
+
+## Transcription
+
+Handwriting is transcribed from the **image**, and lands in Tropy's native
+transcription store (not a note), so it sits where Tropy's own transcription
+feature puts it.
+
+Editorial convention — **diplomatic, with uncertainty marked**:
+
+- Keep original spelling, accentuation and capitalisation (`j'ay`, `cy joint`,
+  `isle`). Do not modernise.
+- Preserve the original line breaks.
+- **Never silently invent a reading.** Mark a doubtful word `[cette isle?]` and
+  an unreadable one `[illisible]`. With cursive this is the failure mode that
+  matters: a fluent guess is worse than a marked gap, because it cannot be
+  distinguished from a real reading later.
 
 ## Gotchas
 
-- `pyzotero.attachment_simple` returns **three** buckets: `success`, `failure`, and `unchanged`. An already-uploaded identical file lands in `unchanged` — that is success, not failure.
-- Credentials live in `~/.zotero_env` (`ZOTERO_LIBRARY_ID` / `ZOTERO_LIBRARY_TYPE` / `ZOTERO_API_KEY`). See `.zotero_env.example` in the repo.
-- Full-library `q=` searches sometimes time out; prefer passing the 8-char item key.
-- If the batch item was just scanned, the local client may not have synced yet — if the item isn't found via the API, ask the user to sync Zotero first.
+- **Transcriptions are invisible until the project is reopened.** Tropy's
+  `POST /transcriptions` writes to the database but does not update application
+  state, so neither the UI nor the API shows them until the project reloads.
+  The data is there — verify with the DB, not with a read-back.
+- **Do not read back merged-away items.** After a merge, `GET /items/:id` on a
+  merged-away item still reports its old photos and `deleted:false`, though the
+  database has it correctly trashed. Trust the merge response.
+- **The project must be open in Tropy.** The API resolves `current` to the
+  focused project window; with nothing open every route returns
+  `404 no project is open`.
+- **`locate --selection` needs exactly one item selected** in the project view.
+  Tropy tracks one current photo, not a multi-photo selection, so the selection
+  addresses items.
+- Large dossiers are slow to fetch — one rendered JPEG per photo. `locate` is
+  read-only and safe to re-run.
