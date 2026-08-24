@@ -21,7 +21,9 @@ locate  ─►  inspect (Claude reads the page images)  ─►  write manifest  
 
 ### Why two passes
 
-Most photos in a dossier only have to answer one question — *does a new document start here?* — and that question survives downscaling, because its cues are visual: a change of hand, ink or paper, a salutation, a signature block, a blank verso, an address panel. Reading those at full resolution is wasted effort.
+Most photos in a dossier only have to answer one question — *does a new document start here?* — and that question survives downscaling, because it is answered by discontinuity rather than by reading: a change of hand, ink, paper or typeface, a heading or letterhead, a signature block, a blank page, text running off the bottom edge. Reading those at full resolution is wasted effort.
+
+It also means the same cues work for printed and handwritten material alike, which is why the boundary guidance in `SKILL.md` is deliberately generic rather than tuned to one collection.
 
 So pass 1 looks at every photo small and decides boundaries only. Pass 2 goes back at full resolution to just the first and last page of each document, where the title, correspondent and date live. On a 189-photo dossier holding ~40 documents, that's ~80 close reads instead of 189.
 

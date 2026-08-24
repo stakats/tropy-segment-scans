@@ -64,10 +64,10 @@ Reading every page closely is wasted effort: most photos only have to answer
 "does a new document start here?". So the inspection is split.
 
 **Pass 1 — boundaries, over `scan/`.** Read the downscaled images of *every*
-photo. Decide only where documents begin and end. The cues are visual and
-survive downscaling: a change of hand, ink or paper; a salutation opening a
-page; a signature block closing one; a blank or near-blank verso; an address
-panel. Do not try to read the text.
+photo and decide only where documents begin and end — see
+[Finding document boundaries](#finding-document-boundaries) below. Do not read
+the text for meaning; you are looking for discontinuity, which is exactly what
+survives downscaling.
 
 For a large dossier this still won't fit one context — `batch.json` gives
 overlapping windows of ~25 photos (3 photos of overlap). Work through them in
@@ -84,32 +84,78 @@ Then, if transcription is in scope, transcribe handwritten documents from the
 `full/` images — see [Transcription](#transcription). Transcription is optional:
 a manifest with no `transcriptions` key produces items and metadata only.
 
-#### Document boundary cues
+#### Finding document boundaries
 
-<!-- TODO: confirm with the researcher which of these actually hold for this
-     collection, and how the dossiers are physically structured (bifolios,
-     blank versos, address panels, folder covers, enclosures). -->
+**Continuity is the default.** Consecutive photos belong to the same document
+unless something positively says otherwise. You are looking for
+*discontinuity*, not reading for meaning — which is why this works downscaled,
+and why it works the same way for a printed circular and a manuscript letter.
 
-For 18th-century French manuscript correspondence, the reliable visual signals
-are usually:
+Ask three questions of each photo. Any one of them alone is weak; **when two
+agree, call a boundary**.
 
-- **Opening and closing formulas** — a salutation (`Monsieur`, `Monseigneur`)
-  starts a document; a subscription and signature (`votre très humble et très
-  obéissant serviteur`) ends one.
-- **A change of hand, ink or paper** — the single strongest cue, and one that
-  only works visually.
-- **The address panel or *dos*** — a folded bifolio often carries the address,
-  and sometimes an archival note, on an otherwise blank outer face. That face
-  belongs to the letter it wraps, and typically marks its end.
-- **Blank or near-blank versos** — usually the tail of a document, not a
-  document of their own.
-- **Archival foliation and dossier covers** — numbering restarts, or a cover
-  sheet names the correspondent, at the start of a new unit.
+**1. Does this page open something?**
 
-Enclosures (a *mémoire*, certificate or list travelling with a covering letter)
-are a judgement call: keep them with the letter when the letter refers to them
-and they carry no independent identity; make them their own item when they are
-substantial and separately titled.
+- A heading, title block, letterhead, masthead or printed form header
+- A salutation, address block or dateline set apart above the main text
+- Text starting unusually low, leaving a deep top margin
+- A centred title, a decorated or enlarged initial, a docket title
+
+**2. Did the previous page close something?**
+
+- Text stopping partway down, leaving blank space to the foot
+- A signature, subscription, seal, stamp or set of initials at the foot
+- A last line that ends cleanly rather than running to the edge
+- A blank or near-blank page, or a page carrying only an endorsement or
+  address panel
+
+**3. Is the material different?**
+
+- Change of hand, ink colour or writing implement (manuscript)
+- Change of typeface, type size, column count or press quality (print)
+- Change of paper: size, tone, edge, texture, ruling, watermark
+- Change in the photograph itself — background, lighting, camera distance,
+  orientation. The camera often registers a new physical object before the
+  content does.
+
+**Signals that a document continues.** These outrank a weak opening cue:
+
+- Text running to the bottom edge, breaking mid-sentence or mid-word
+- A catchword at the foot repeating the next page's first word
+- Page or folio numbers continuing in sequence
+- Same hand, ink, paper and layout as the page before
+
+Numbering is worth special attention because it is legible when nothing else
+is: foliation restarting, or a change of archival stamp, call number or
+docket, is strong evidence of a new unit; numbers running on are strong
+evidence against one.
+
+#### Capture unit
+
+Establish from the first few photos whether a photo holds **one leaf**, an
+**opening** (two pages at once), or a **recto/verso pair**, and apply that
+consistently. Getting it wrong doubles or halves every document in the dossier.
+
+#### Conventions
+
+- A **blank or near-blank page belongs to the document before it**, not the one
+  after.
+- **Covers, labels, rulers, colour targets and folder shots are not documents.**
+  Leave them unassigned — they stay on the dossier shell.
+- **Enclosures** — an attachment travelling with a covering document — are a
+  judgement call: keep them with the parent when the parent refers to them and
+  they carry no independent identity; make them their own item when they are
+  substantial and separately titled.
+- **When the evidence is ambiguous, join rather than split**, and say so in the
+  report. An item holding two documents still shows them whole and in order,
+  and is easy to split further; two items each holding half a document carry
+  wrong metadata and read as complete. Everything is tagged `for review`
+  regardless.
+- A photo can hold the **end of one document and the start of another** —
+  common in bound registers, rare in loose material. The manifest cannot split
+  a photo: assign it to whichever document occupies most of it and flag it.
+- If a document is **still open at the last photo**, it runs past the end of
+  this item. Do not invent an ending — group what is there and report it.
 
 ### 3. Write the manifest
 
