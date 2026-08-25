@@ -1,0 +1,15 @@
+{
+  "_comment": "Segmentation settings. Revised independently of the workflow; scripts/tsegment.py reads this file and command-line flags override it. The prose policy is in segmentation.md.",
+
+  "scan_edge": 1024,
+  "_scan_edge": "Longest edge, in pixels, of the pass-1 copies. Large enough to see a change of hand, a signature block or a blank verso. Untested below this.",
+
+  "window": 25,
+  "_window": "Photos per pass-1 window, for dossiers too large to inspect in one pass.",
+
+  "overlap": 3,
+  "_overlap": "Photos shared between consecutive windows, so a document straddling a boundary is still seen whole.",
+
+  "review_tag": "for review",
+  "_review_tag": "Applied to every item the workflow creates, on top of the tags inherited from the dossier."
+}

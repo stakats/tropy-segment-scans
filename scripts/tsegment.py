@@ -33,17 +33,26 @@ from pathlib import Path
 
 WORKROOT = Path("/tmp/tropy-segment")
 DEFAULT_PORT = int(os.environ.get("TROPY_PORT", "2019"))
-REVIEW_TAG = "for review"
+
+# Segmentation settings live beside the policy they belong to, so both can be
+# revised without touching this file. Keys prefixed with _ are documentation.
+SETTINGS_FILE = Path(__file__).resolve().parent.parent / "segmentation.json"
+SETTINGS = {"scan_edge": 1024, "window": 25, "overlap": 3,
+            "review_tag": "for review"}
+try:
+    SETTINGS.update({
+        k: v for k, v in json.loads(SETTINGS_FILE.read_text()).items()
+        if not k.startswith("_")
+    })
+except (OSError, ValueError):
+    pass  # fall back to the defaults above
+
+REVIEW_TAG = SETTINGS["review_tag"]
 
 # The API's form parser turns more than this many repeated keys into an object
 # keyed by index instead of an array (qs's arrayLimit), so list parameters are
 # sent in batches of at most this size.
 FORM_LIST_LIMIT = 20
-
-# Longest edge of the downscaled copies used for the boundary pass. Big enough
-# to see a change of hand, a signature block or a blank verso; small enough
-# that a whole dossier can be looked at without reading every page closely.
-SCAN_EDGE = 1024
 
 # Tropy stores metadata as RDF properties. These are the ones the workflow
 # writes per document; everything else is inherited from the batch item.
@@ -557,15 +566,16 @@ def main():
     group.add_argument("item", nargs="?", type=int, help="batch item id")
     group.add_argument("--selection", action="store_true",
                        help="use the item selected in Tropy")
-    loc.add_argument("--chunk", type=int, default=25,
-                     help="photos per pass-1 window (default 25)")
-    loc.add_argument("--overlap", type=int, default=3,
-                     help="photos of overlap between pass-1 windows "
-                          "(default 3)")
-    loc.add_argument("--scan-edge", type=int, default=SCAN_EDGE,
+    loc.add_argument("--chunk", type=int, default=SETTINGS["window"],
+                     help=f"photos per pass-1 window "
+                          f"(default {SETTINGS['window']})")
+    loc.add_argument("--overlap", type=int, default=SETTINGS["overlap"],
+                     help=f"photos of overlap between pass-1 windows "
+                          f"(default {SETTINGS['overlap']})")
+    loc.add_argument("--scan-edge", type=int, default=SETTINGS["scan_edge"],
                      dest="scan_edge",
                      help=f"longest edge of the pass-1 copies "
-                          f"(default {SCAN_EDGE})")
+                          f"(default {SETTINGS['scan_edge']})")
     loc.set_defaults(func=cmd_locate)
 
     ex = sub.add_parser("execute", help="split the batch item per the manifest")

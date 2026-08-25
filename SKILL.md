@@ -18,8 +18,9 @@ duplicated and every change lands in Tropy's undo history.
 
 > **Conventions are adaptable defaults.** The `for review` tag, the
 > "empty dossier shell" rule and the descriptive-title convention reflect one
-> archival workflow. Adjust the prose here and the constants in
-> `scripts/tsegment.py` to match your own.
+> archival workflow. The boundary rules and their settings are kept apart, in
+> `segmentation.md` and `segmentation.json`, so they can be revised on their
+> own.
 
 ## Prerequisites
 
@@ -58,7 +59,7 @@ Resolves the batch item and downloads every photo as a rendered JPEG (rotation,
 mirroring and adjustments applied — what Tropy *displays*, not the raw file),
 in two renditions, to `/tmp/tropy-segment/<itemId>/`:
 
-- `scan/page-001.jpg` … downscaled to 1024px on the long edge — for pass 1
+- `scan/page-001.jpg` … downscaled (`scan_edge`) — for pass 1
 - `full/page-001.jpg` … the full rendering — for pass 2
 - `batch.json` — photo ids, filenames, dimensions, both image paths, the
   dossier's inherited metadata, and the pass-1 window plan
@@ -70,15 +71,14 @@ Reading every page closely is wasted effort: most photos only have to answer
 "does a new document start here?". So the inspection is split.
 
 **Pass 1 — boundaries, over `scan/`.** Read the downscaled images of *every*
-photo and decide only where documents begin and end — see
-[Finding document boundaries](#finding-document-boundaries) below. Do not read
-the text for meaning; you are looking for discontinuity, which is exactly what
-survives downscaling.
+photo and decide only where documents begin and end, following
+`segmentation.md`. Do not read the text for meaning; you are looking for
+discontinuity, which is exactly what survives downscaling.
 
 For a large dossier this still won't fit one context — `batch.json` gives
-overlapping windows of ~25 photos (3 photos of overlap). Work through them in
-order; when a document is still open at the end of a window, close it in the
-next one rather than guessing.
+overlapping windows (`window`, `overlap`). Work through them in order; when a
+document is still open at the end of a window, close it in the next one rather
+than guessing.
 
 **Pass 2 — metadata, over `full/`.** For each document found in pass 1, read
 the full-resolution image of its **first and last page** (in these letters the
@@ -89,78 +89,12 @@ dossier costs ~80 close reads rather than 189.
 **Do not transcribe.** That is not this skill's job — see
 [Transcription](#transcription).
 
-#### Finding document boundaries
+#### Where the boundary rules live
 
-**Continuity is the default.** Consecutive photos belong to the same document
-unless something positively says otherwise. You are looking for
-*discontinuity*, not reading for meaning — which is why this works downscaled,
-and why it works the same way for a printed circular and a manuscript letter.
-
-Ask three questions of each photo. Any one of them alone is weak; **when two
-agree, call a boundary**.
-
-**1. Does this page open something?**
-
-- A heading, title block, letterhead, masthead or printed form header
-- A salutation, address block or dateline set apart above the main text
-- Text starting unusually low, leaving a deep top margin
-- A centred title, a decorated or enlarged initial, a docket title
-
-**2. Did the previous page close something?**
-
-- Text stopping partway down, leaving blank space to the foot
-- A signature, subscription, seal, stamp or set of initials at the foot
-- A last line that ends cleanly rather than running to the edge
-- A blank or near-blank page, or a page carrying only an endorsement or
-  address panel
-
-**3. Is the material different?**
-
-- Change of hand, ink colour or writing implement (manuscript)
-- Change of typeface, type size, column count or press quality (print)
-- Change of paper: size, tone, edge, texture, ruling, watermark
-- Change in the photograph itself — background, lighting, camera distance,
-  orientation. The camera often registers a new physical object before the
-  content does.
-
-**Signals that a document continues.** These outrank a weak opening cue:
-
-- Text running to the bottom edge, breaking mid-sentence or mid-word
-- A catchword at the foot repeating the next page's first word
-- Page or folio numbers continuing in sequence
-- Same hand, ink, paper and layout as the page before
-
-Numbering is worth special attention because it is legible when nothing else
-is: foliation restarting, or a change of archival stamp, call number or
-docket, is strong evidence of a new unit; numbers running on are strong
-evidence against one.
-
-#### Capture unit
-
-Establish from the first few photos whether a photo holds **one leaf**, an
-**opening** (two pages at once), or a **recto/verso pair**, and apply that
-consistently. Getting it wrong doubles or halves every document in the dossier.
-
-#### Conventions
-
-- A **blank or near-blank page belongs to the document before it**, not the one
-  after.
-- **Covers, labels, rulers, colour targets and folder shots are not documents.**
-  Leave them unassigned — they stay on the dossier shell.
-- **Enclosures** — an attachment travelling with a covering document — are a
-  judgement call: keep them with the parent when the parent refers to them and
-  they carry no independent identity; make them their own item when they are
-  substantial and separately titled.
-- **When the evidence is ambiguous, join rather than split**, and say so in the
-  report. An item holding two documents still shows them whole and in order,
-  and is easy to split further; two items each holding half a document carry
-  wrong metadata and read as complete. Everything is tagged `for review`
-  regardless.
-- A photo can hold the **end of one document and the start of another** —
-  common in bound registers, rare in loose material. The manifest cannot split
-  a photo: assign it to whichever document occupies most of it and flag it.
-- If a document is **still open at the last photo**, it runs past the end of
-  this item. Do not invent an ending — group what is there and report it.
+The policy for this decision is in **`segmentation.md`**, and its settings in
+**`segmentation.json`**. Read `segmentation.md` before pass 1. Both are meant
+to be revised on their own — per collection, or as experience accumulates —
+without touching this file or the script, so do not restate their rules here.
 
 ### 3. Write the manifest
 

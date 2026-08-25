@@ -33,7 +33,7 @@ locate  ─►  inspect (Claude reads the page images)  ─►  write manifest  
 
 Most photos in a dossier only have to answer one question — *does a new document start here?* — and that question survives downscaling, because it is answered by discontinuity rather than by reading: a change of hand, ink, paper or typeface, a heading or letterhead, a signature block, a blank page, text running off the bottom edge. Reading those at full resolution is wasted effort.
 
-It also means the same cues work for printed and handwritten material alike, which is why the boundary guidance in `SKILL.md` is deliberately generic rather than tuned to one collection.
+It also means the same cues work for printed and handwritten material alike, which is why the boundary policy is deliberately generic rather than tuned to one collection. It lives in its own file, [`segmentation.md`](segmentation.md), with its settings in [`segmentation.json`](segmentation.json), so it can be revised — or replaced for a particular collection — without touching the workflow or the script.
 
 So pass 1 looks at every photo small and decides boundaries only. Pass 2 goes back at full resolution to just the first and last page of each document, where the title, correspondent and date live. On a 189-photo dossier holding ~40 documents, that's ~80 close reads instead of 189.
 
@@ -88,7 +88,7 @@ This matters for what you get at the end. Segmenting gives you correctly catalog
 - **One Tropy item per dossier, many documents inside.** The source is a batch item holding the photos of a whole archive folder.
 - **The API is enabled and the project is open.** Port 2019 by default (2029 on beta/dev channels).
 - **Visual inspection happens.** The whole point is that Claude *looks at the pages*.
-- **The conventions are yours to change** — the `for review` tag, the empty-shell rule and the title convention are defaults, not requirements.
+- **The conventions are yours to change** — the `for review` tag, the empty-shell rule and the title convention are defaults, not requirements. The boundary policy is deliberately kept in its own file for exactly this reason.
 
 ## Known wrinkles
 
@@ -148,9 +148,12 @@ Flags: `--port` (default 2019), `--project` (a project id, or `current`), `--chu
 
 ```
 tropy-segment-scans/
-├── SKILL.md             # the skill definition Claude reads
+├── SKILL.md             # the workflow Claude follows
+├── segmentation.md      # the boundary policy — revised on its own
+├── segmentation.json    # its settings — revised on its own
+├── NOTES.md             # observations awaiting promotion
 ├── scripts/
-│   └── tsegment.py        # the locate/execute implementation
+│   └── tsegment.py      # the locate/execute implementation
 ├── .gitignore
 └── LICENSE              # MIT
 ```
