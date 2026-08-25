@@ -152,6 +152,7 @@ tropy-segment-scans/
 ├── segmentation.md      # the boundary policy — revised on its own
 ├── segmentation.json    # its settings — revised on its own
 ├── NOTES.md             # observations awaiting promotion
+├── PLUGIN-PORT.md       # findings for a future Tropy plugin
 ├── scripts/
 │   └── tsegment.py      # the locate/execute implementation
 ├── .gitignore
